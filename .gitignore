@@ -1,0 +1,22 @@
+# R session artefacts
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# Environment / secrets — never commit credentials
+.Renviron
+.env
+
+# renv local library (lock file is committed; the library itself is not)
+renv/library/
+renv/staging/
+renv/sandbox/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# rsconnect deployment records (contain account tokens)
+rsconnect/
+manifest.json
