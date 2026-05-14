@@ -131,7 +131,7 @@ make_lebgov_set <- function(smeb_def, exch) {
 
 make_wfp_set <- function(smeb_def, exch) {
 
-  wfp_raw <- s3_csv("s3://mena-regional/Lebanon/food-prices/wfp_raw.csv")
+  wfp_raw <- s3_csv("s3://mena-regional/Lebanon/food-prices/wfp_simple.csv")
 
   smeb_items <- smeb_def %>%
     select(item = wfp_item, quant = org_wfp_name)
