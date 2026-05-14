@@ -139,6 +139,7 @@ make_wfp_set <- function(smeb_def, exch) {
   smeb_total <- wfp_raw %>%
     filter(priceflag == "actual", pricetype == "Retail") %>%
     select(date, item = commodity, price, price_usd = usdprice) %>%
+    mutate(item = as.character(item)) %>%
     inner_join(smeb_items, by = "item") %>%
     mutate(
       weighted_price     = price     * quant,
@@ -171,8 +172,9 @@ make_wfp_set <- function(smeb_def, exch) {
     group_by(date) %>%
     summarise(lbp_usd = mean(lbp_usd), .groups = "drop")
 
-  wfp_raw %>%
+  wfp_processed = wfp_raw %>%
     select(date, price, price_usd = usdprice, item = commodity, unit) %>%
+    mutate(item = as.character(item)) %>%
     bind_rows(smeb_total) %>%
     filter(item != "Exchange rate (unofficial)") %>%
     mutate(
@@ -192,9 +194,12 @@ make_wfp_set <- function(smeb_def, exch) {
         unit == "Head" ~ "head",
         TRUE           ~ unit
       )
-    ) %>%
+    ) 
+  
+  wfp_processed %>%
     left_join(exch_monthly, by = "date") %>%
-    mutate(source = "WFP")
+    mutate(source = "WFP") %>%
+    dplyr::mutate(lbp_usd = ifelse(is.na(lbp_usd), price/price_usd, lbp_usd))
 }
 
 
