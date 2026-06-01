@@ -11,8 +11,14 @@ library(DT)
 library(thematic)
 library(readr)
 library(shinyWidgets)
+library(readxl)
 
 source("modules.R")
+
+# ── SMEB item definitions for cross-source comparison ─────────────────────────
+
+deffer <- readxl::read_excel("SMEB_tables_def.xlsx", sheet = "deffer") %>%
+  filter(baskett == "Food SMEB")
 
 # ── Static data loaded once at startup ───────────────────────────────────────
 
@@ -134,149 +140,53 @@ thematic::thematic_shiny()
 function(input, output, session) {
 
   # ── Page 1: dynamic sidebar controls ───────────────────────────────────────
-  # item_list switches between food and NFI based on the active tab
-
-  active_item_list <- reactive({
-    tab <- input$p1_tabs %||% "Food Items"
-    if (tab == "Non-Food Items") nfi_items_all else food_items_all
-  })
 
   output$food_controls <- renderUI({
-    items <- active_item_list()
-    if (input$food_mode == "cross_source") {
-      tagList(
-        selectInput(
-          inputId  = "food_item_cross",
-          label    = "Item",
-          choices  = items,
-          selected = items[1]
-        ),
-        checkboxGroupInput(
-          inputId  = "food_sources_cross",
-          label    = "Sources",
-          choices  = food_sources_all,
-          selected = food_sources_all
-        )
+    tab <- input$p1_tabs %||% "SMEB by Source"
+    if (tab == "Item Comparison") {
+      selectInput(
+        inputId  = "compare_item",
+        label    = "Item",
+        choices  = deffer$itemm,
+        selected = deffer$itemm[1]
       )
     } else {
-      tagList(
-        selectInput(
-          inputId  = "food_source_within",
-          label    = "Source",
-          choices  = food_sources_all,
-          selected = food_sources_all[1]
-        ),
-        pickerInput(
-          inputId  = "food_items_within",
-          label    = "Items",
-          choices  = items,
-          selected = items[seq_len(min(5L, length(items)))],
-          multiple = TRUE,
-          options  = list(`live-search` = TRUE, `actions-box` = TRUE,
-                          title = "Select items...")
-        )
+      selectInput(
+        inputId  = "smeb_source_v1",
+        label    = "Source",
+        choices  = c("Lebanese Government", "WFP", "Carrefour"),
+        selected = "Lebanese Government"
       )
     }
   })
 
-  # ── Page 1: shared item-chart reactive factory ──────────────────────────────
-  # Used by both food_plot and nfi_plot; caller supplies the allowed item list.
-
-  make_item_data <- function(allowed_items) {
-    reactive({
-      price_col <- if (input$food_currency == "usd") "price_usd" else "price"
-
-      base <- app_set %>%
-        filter(
-          unit != "index",
-          unit != "basket",
-          !item %in% smeb_items,
-          !item %in% fuel_items,
-          item %in% allowed_items,
-          source != "IPT"
-        ) %>%
-        rename(plot_price = !!price_col)
-
-      if (input$food_mode == "cross_source") {
-        req(input$food_item_cross, input$food_sources_cross)
-        base %>%
-          filter(item == input$food_item_cross,
-                 source %in% input$food_sources_cross) %>%
-          mutate(series = source)
-      } else {
-        req(input$food_source_within, input$food_items_within)
-        base %>%
-          filter(source == input$food_source_within,
-                 item   %in% input$food_items_within) %>%
-          mutate(series = item)
-      }
-    })
-  }
-
-  food_data <- make_item_data(food_items_all)
-  nfi_data  <- make_item_data(nfi_items_all)
-
-  # ── Shared render helper for item charts ─────────────────────────────────────
-
-  render_item_plot <- function(data_reactive, tab_label) {
-    renderPlot({
-      df <- data_reactive()
-      req(nrow(df) > 0)
-
-      ylabel <- if (input$food_currency == "usd") "Price (USD)" else "Price (LBP)"
-
-      title_str <- if (input$food_mode == "cross_source") {
-        paste(tab_label, "— Price Comparison Across Sources:", input$food_item_cross)
-      } else {
-        paste(tab_label, "— Item Prices:", input$food_source_within)
-      }
-
-      ggplot(df, aes(x = as.Date(date), y = plot_price, colour = series)) +
-        geom_line(linewidth = 1.1, na.rm = TRUE) +
-        geom_point(size = 1.6, na.rm = TRUE) +
-        scale_colour_manual(values = mc_palette, name = NULL) +
-        scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
-        scale_y_continuous(labels = comma) +
-        labs(title = title_str, x = NULL, y = ylabel) +
-        mc_theme() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1),
-              legend.position = "bottom")
-    }, bg = "#242424")
-  }
-
-  output$food_plot <- render_item_plot(food_data, "Food Items")
-  output$nfi_plot  <- render_item_plot(nfi_data,  "Non-Food Items")
-
-  # ── Page 1: SMEB reactive data ──────────────────────────────────────────────
+  # ── Page 1: SMEB by Source ──────────────────────────────────────────────────
 
   smeb_data <- reactive({
-    req(input$smeb_sources)
+    req(input$smeb_source_v1)
     price_col <- if (input$food_currency == "usd") "price_usd" else "price"
 
-    smeb_labels <- c(
-      "Lebanese Government" = "Lebanese Government",
-      "WFP"                 = "WFP",
-      "food_SMEB"           = "Carrefour – Food",
-      "nfi_SMEB"            = "Carrefour – NFI",
-      "total_SMEB"          = "Carrefour – Total"
-    )
-
-    # Sources that are source-level entries vs item-name entries
-    source_based <- intersect(input$smeb_sources, c("Lebanese Government", "WFP"))
-    item_based   <- intersect(input$smeb_sources, c("food_SMEB", "nfi_SMEB", "total_SMEB"))
-
-    rows_source <- app_set %>%
-      filter(item == "SMEB", source %in% source_based)
-
-    rows_item <- app_set %>%
-      filter(item %in% item_based)
-
-    bind_rows(rows_source, rows_item) %>%
-      mutate(
-        series = coalesce(smeb_labels[item], smeb_labels[source], source),
-        plot_price = .data[[price_col]],
-        date = as.Date(date)
-      )
+    if (input$smeb_source_v1 == "Carrefour") {
+      app_set %>%
+        filter(source == "Carrefour", item %in% c("food_SMEB", "nfi_SMEB")) %>%
+        mutate(
+          series = case_when(
+            item == "food_SMEB" ~ "Food SMEB",
+            item == "nfi_SMEB"  ~ "NFI SMEB",
+            TRUE                ~ item
+          ),
+          plot_price = .data[[price_col]],
+          date = as.Date(date)
+        )
+    } else {
+      app_set %>%
+        filter(item == "SMEB", source == input$smeb_source_v1) %>%
+        mutate(
+          series = "Food SMEB",
+          plot_price = .data[[price_col]],
+          date = as.Date(date)
+        )
+    }
   })
 
   output$smeb_plot <- renderPlot({
@@ -291,9 +201,82 @@ function(input, output, session) {
       scale_colour_manual(values = mc_palette, name = NULL) +
       scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
       scale_y_continuous(labels = comma) +
-      labs(title = "Survival Minimum Expenditure Basket (SMEB)",
-           subtitle = "Monthly cost by data source",
-           x = NULL, y = ylabel) +
+      labs(
+        title    = paste("SMEB —", input$smeb_source_v1),
+        subtitle = "Monthly cost by basket type",
+        x        = NULL,
+        y        = ylabel
+      ) +
+      mc_theme() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),
+            legend.position = "bottom")
+  }, bg = "#242424")
+
+  # ── Page 1: Item Comparison ─────────────────────────────────────────────────
+
+  item_compare_data <- reactive({
+    req(input$compare_item)
+    price_col <- if (input$food_currency == "usd") "price_usd" else "price"
+
+    row <- deffer %>% filter(itemm == input$compare_item)
+    req(nrow(row) == 1)
+
+    leb <- if (!is.na(row$mnstry_item)) {
+      app_set %>%
+        filter(source == "Lebanese Government",
+               item == stringr::str_to_title(row$mnstry_item)) %>%
+        mutate(
+          plot_price = .data[[price_col]] * row$minstry_multi_ltr_kg,
+          series = "Lebanese Government"
+        )
+    } else {
+      NULL
+    }
+
+    wfp <- if (!is.na(row$wfp_itemm)) {
+      app_set %>%
+        filter(source == "WFP", item == row$wfp_itemm) %>%
+        mutate(
+          plot_price = .data[[price_col]] * row$wfp_multi_ltr_kg,
+          series = "WFP"
+        )
+    } else {
+      NULL
+    }
+
+    car <- carrefour_items %>%
+      filter(item == row$itemm) %>%
+      mutate(
+        plot_price = .data[[price_col]],
+        series = "Carrefour"
+      )
+
+    bind_rows(leb, wfp, car) %>%
+      mutate(date = as.Date(date))
+  })
+
+  output$item_compare_plot <- renderPlot({
+    df <- item_compare_data()
+    req(nrow(df) > 0)
+
+    ylabel <- if (input$food_currency == "usd") {
+      "Price (USD, per kg / normalized unit)"
+    } else {
+      "Price (LBP, per kg / normalized unit)"
+    }
+
+    ggplot(df, aes(x = date, y = plot_price, colour = series)) +
+      geom_line(linewidth = 1.1, na.rm = TRUE) +
+      geom_point(size = 1.6, na.rm = TRUE) +
+      scale_colour_manual(values = mc_palette, name = NULL) +
+      scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
+      scale_y_continuous(labels = comma) +
+      labs(
+        title    = paste("Item Comparison —", input$compare_item),
+        subtitle = "Quantity-normalized prices across sources",
+        x        = NULL,
+        y        = ylabel
+      ) +
       mc_theme() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1),
             legend.position = "bottom")
@@ -317,21 +300,22 @@ function(input, output, session) {
 
   output$vb_cpi <- renderText({
     latest <- app_set %>%
-      filter(unit == "index", item == "Consumer Price Index" | grepl("CPI", item)) %>%
+      filter(unit == "index", tolower(item) == "consumer price index") %>%
+      arrange(date) %>%
+      mutate(growth = (price - lag(price)) / lag(price) * 100) %>%
+      filter(!is.na(growth)) %>%
       slice_max(date, n = 1)
-    if (nrow(latest) == 0) {
-      # Fallback: any index item
-      latest <- app_set %>% filter(unit == "index") %>% slice_max(date, n = 1)
-    }
     if (nrow(latest) == 0) return("N/A")
-    round(latest$price[1], 1)
+    paste0(round(latest$growth[1], 1), "% Growth Rate")
   })
 
   # Populate CPI category selector once app_set is available
   observe({
+    default_cpi <- cpi_categories[tolower(cpi_categories) == "consumer price index"][1]
+    if (is.na(default_cpi)) default_cpi <- cpi_categories[1]
     updateSelectInput(session, "cpi_category",
                       choices  = cpi_categories,
-                      selected = cpi_categories[1])
+                      selected = default_cpi)
   })
 
   # ── Page 2: fuel plot ───────────────────────────────────────────────────────
@@ -397,18 +381,25 @@ function(input, output, session) {
     df <- app_set %>%
       filter(unit == "index", item == input$cpi_category) %>%
       mutate(date = as.Date(date)) %>%
-      filter(!is.na(price))
+      filter(!is.na(price)) %>%
+      arrange(date) %>%
+      mutate(growth = (price - lag(price)) / lag(price) * 100) %>%
+      filter(!is.na(growth))
 
     req(nrow(df) > 0)
 
-    ggplot(df, aes(x = date, y = price)) +
-      geom_area(fill = "#BE3144", alpha = 0.15) +
+    ggplot(df, aes(x = date, y = growth)) +
+      geom_col(fill = "#BE3144", alpha = 0.6, width = 20) +
       geom_line(colour = "#BE3144", linewidth = 1.4) +
+      geom_hline(yintercept = 0, colour = "#555555", linewidth = 0.5) +
       scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
-      scale_y_continuous(labels = comma) +
-      labs(title = paste(input$cpi_category, "— Consumer Price Index"),
-           subtitle = "% change since 2015 base year",
-           x = NULL, y = "Index (2015 = 100)") +
+      scale_y_continuous(labels = function(x) paste0(x, "%")) +
+      labs(
+        title    = paste(input$cpi_category, "— Monthly Growth Rate"),
+        subtitle = "Month-over-month % change",
+        x        = NULL,
+        y        = "Month-over-Month % Change"
+      ) +
       mc_theme() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   }, bg = "#242424")
@@ -567,12 +558,10 @@ function(input, output, session) {
     if (is.null(idx) || length(idx) == 0) idx <- 2L
     cadaster_row <- most_vuln[idx, ] %>% st_drop_geometry()
 
-    nlr_filtered <- nlr_raw %>%
+    nlr_raw %>%
       filter(admin3Name == cadaster_row$Cadaster[[1]]) %>%
-      arrange(date)
-
-    left_join(nlr_filtered, diesel_monthly %>% select(date, diesel_price = price),
-              by = "date")
+      arrange(date) %>%
+      mutate(nlr_growth = (mean - lag(mean)) / lag(mean) * 100)
   })
 
   output$ts_nlr <- renderPlot({
@@ -581,26 +570,26 @@ function(input, output, session) {
 
     cadaster_name <- df$admin3Name[1]
 
-    # Scale factor: map diesel range onto NLR range for sec.axis
-    nlr_range    <- range(df$mean,         na.rm = TRUE)
-    diesel_range <- range(df$diesel_price, na.rm = TRUE)
+    # Scale factor: map growth-rate range onto NLR range for sec.axis
+    nlr_range    <- range(df$mean,       na.rm = TRUE)
+    growth_range <- range(df$nlr_growth, na.rm = TRUE)
     nlr_span     <- diff(nlr_range)
-    diesel_span  <- diff(diesel_range)
+    growth_span  <- diff(growth_range)
 
-    if (is.na(diesel_span) || diesel_span == 0 || is.na(nlr_span) || nlr_span == 0) {
+    if (is.na(growth_span) || growth_span == 0 || is.na(nlr_span) || nlr_span == 0) {
       scale_factor <- 1
       shift        <- 0
     } else {
-      scale_factor <- nlr_span / diesel_span
-      shift        <- nlr_range[1] - diesel_range[1] * scale_factor
+      scale_factor <- nlr_span / growth_span
+      shift        <- nlr_range[1] - growth_range[1] * scale_factor
     }
 
     df <- df %>%
-      mutate(diesel_scaled = diesel_price * scale_factor + shift)
+      mutate(growth_scaled = nlr_growth * scale_factor + shift)
 
     ggplot(df, aes(x = date)) +
       geom_line(aes(y = mean), colour = "#BE3144", linewidth = 1.3, na.rm = TRUE) +
-      geom_line(aes(y = diesel_scaled), colour = "#e8e8e8",
+      geom_line(aes(y = growth_scaled), colour = "#e8e8e8",
                 linewidth = 1.1, linetype = "dashed", na.rm = TRUE) +
       scale_x_date(date_breaks = "6 months", date_labels = "%b %Y") +
       scale_y_continuous(
@@ -608,18 +597,18 @@ function(input, output, session) {
         labels = number_format(accuracy = 0.1),
         sec.axis = sec_axis(
           transform = ~ (. - shift) / scale_factor,
-          name      = "Diesel 20L (LBP)",
-          labels    = comma
+          name      = "NLR Growth Rate (%)",
+          labels    = function(x) paste0(round(x, 1), "%")
         )
       ) +
       labs(
         title    = paste("Night Light Radiance —", cadaster_name),
-        subtitle = "Red: NLR  |  Dashed: National average diesel price (LBP)",
+        subtitle = "Red: NLR  |  Dashed: NLR monthly growth rate (%)",
         x        = NULL
       ) +
       mc_theme() +
       theme(
-        axis.text.x       = element_text(angle = 45, hjust = 1),
+        axis.text.x        = element_text(angle = 45, hjust = 1),
         axis.title.y.right = element_text(colour = "#b0b0b0")
       )
   }, bg = "#242424")

@@ -87,6 +87,30 @@ page_navbar(
 
     /* Page-3 notes body text */
     .card p, .card li { color: #d8d8d8; }
+
+    /* Sidebar: uniform background (avoid grey gap below controls) */
+    .bslib-sidebar-layout > .sidebar,
+    .bslib-sidebar-layout > .sidebar > .sidebar-content {
+      background-color: #1e1e1e !important;
+    }
+
+    /* Economic Indicators: scrollable page, natural row heights */
+    .tab-pane.econ-tab-pane {
+      overflow-y: auto;
+      max-height: calc(100vh - 56px);
+    }
+    .econ-indicators-page {
+      padding-bottom: 24px;
+    }
+
+    /* Vulnerability Index: scrollable page, natural row heights */
+    .tab-pane.vuln-tab-pane {
+      overflow-y: auto;
+      max-height: calc(100vh - 56px);
+    }
+    .vuln-index-page {
+      padding-bottom: 24px;
+    }
   "))),
 
   # ── Page 1: Food Prices & SMEB ─────────────────────────────────────────────
@@ -95,53 +119,24 @@ page_navbar(
     icon  = icon("basket-shopping"),
 
     layout_sidebar(
-      fillable = TRUE,
+      fillable = FALSE,
       sidebar = sidebar(
         width = 280,
         open  = "open",
         style = sidebar_style,
 
-        # Mode toggle — shown always
-        radioButtons(
-          inputId  = "food_mode",
-          label    = "Comparison mode",
-          choices  = c(
-            "Same item, compare sources" = "cross_source",
-            "Multiple items, one source" = "within_source"
-          ),
-          selected = "cross_source"
-        ),
-        hr(style = "border-color: #444;"),
-
-        # Dynamic controls swap based on mode
+        # Tab-aware controls (source or item selector)
         uiOutput("food_controls"),
 
         hr(style = "border-color: #444;"),
 
-        # Currency shown on both tabs
         radioButtons(
           inputId  = "food_currency",
           label    = "Currency",
           choices  = c("USD" = "usd", "LBP" = "lbp"),
           selected = "usd",
           inline   = TRUE
-        ),
-
-        hr(style = "border-color: #444;"),
-
-        # SMEB-tab source selector (hidden when on food tab via CSS / server toggle)
-        checkboxGroupInput(
-          inputId  = "smeb_sources",
-          label    = "SMEB sources",
-          choices  = c(
-            "Lebanese Government" = "Lebanese Government",
-            "WFP"                 = "WFP",
-            "Carrefour – Food"    = "food_SMEB",
-            "Carrefour – NFI"     = "nfi_SMEB",
-            "Carrefour – Total"   = "total_SMEB"
-          ),
-          selected = c("Lebanese Government", "WFP")
-        ),
+        )
 
       ),
 
@@ -151,18 +146,13 @@ page_navbar(
         title = NULL,
 
         nav_panel(
-          title = "Food Items",
-          plotOutput("food_plot", height = "520px")
-        ),
-
-        nav_panel(
-          title = "Non-Food Items",
-          plotOutput("nfi_plot", height = "520px")
-        ),
-
-        nav_panel(
-          title = "SMEB",
+          title = "SMEB by Source",
           plotOutput("smeb_plot", height = "520px")
+        ),
+
+        nav_panel(
+          title = "Item Comparison",
+          plotOutput("item_compare_plot", height = "520px")
         )
       )
     )
@@ -172,6 +162,11 @@ page_navbar(
   nav_panel(
     title = "Economic Indicators",
     icon  = icon("chart-line"),
+    class = "econ-tab-pane",
+    fillable = FALSE,
+
+    div(
+      class = "econ-indicators-page",
 
     layout_columns(
       fill         = FALSE,
@@ -198,7 +193,6 @@ page_navbar(
 
     layout_columns(
       col_widths = c(6, 6),
-      row_heights = "420px",
 
       card(
         full_screen = TRUE,
@@ -216,19 +210,18 @@ page_navbar(
             offStatus  = "secondary"
           )
         ),
-        plotOutput("fuel_plot", height = "340px")
+        plotOutput("fuel_plot", height = "480px")
       ),
 
       card(
         full_screen = TRUE,
         card_header("LBP / USD Exchange Rate"),
-        plotOutput("exch_plot", height = "340px")
+        plotOutput("exch_plot", height = "480px")
       )
     ),
 
     layout_columns(
       col_widths = 12,
-      row_heights = "420px",
 
       card(
         full_screen = TRUE,
@@ -242,16 +235,22 @@ page_navbar(
             width    = "260px"
           )
         ),
-        plotOutput("cpi_plot", height = "320px")
+        plotOutput("cpi_plot", height = "520px")
       )
     )
+
+    ) # end econ-indicators-page
   ),
 
   # ── Page 3: Economic Vulnerability Index ───────────────────────────────────
   nav_panel(
     title = "Vulnerability Index",
     icon  = icon("map"),
-    fillable = TRUE,
+    class = "vuln-tab-pane",
+    fillable = FALSE,
+
+    div(
+      class = "vuln-index-page",
 
     # Weight toggle at top
     div(
@@ -268,26 +267,24 @@ page_navbar(
     ),
 
     layout_columns(
-      col_widths  = c(7, 5),
-      row_heights = "460px",
+      col_widths = c(7, 5),
 
       card(
         full_screen = TRUE,
         card_header("Economic Vulnerability Index"),
-        leafletOutput("nlr_map", height = "100%")
+        leafletOutput("nlr_map", height = "520px")
       ),
 
       card(
         full_screen = TRUE,
-        card_header("Night Light Radiance & Diesel Price"),
-        plotOutput("ts_nlr", height = "100%")
+        card_header("Night Light Radiance & Growth Rate"),
+        plotOutput("ts_nlr", height = "520px")
       )
     ),
 
     card(
       full_screen = TRUE,
       card_header("Economic Vulnerability by Cadaster (sorted by most vulnerable)"),
-      style = "max-height: 380px; overflow-y: auto;",
       DTOutput("vulnerability_table")
     ),
 
@@ -301,6 +298,8 @@ page_navbar(
       ),
       p("Percentile rankings of these indicators are summed for the unweighted EVS; the population-weighted EVS multiplies by local population. Only the top 25% most vulnerable cadasters are shown on the map.")
     )
+
+    ) # end vuln-index-page
   ),
 
   nav_spacer(),

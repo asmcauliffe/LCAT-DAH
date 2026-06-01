@@ -261,6 +261,36 @@ make_fuel_set <- function(exch, col_order) {
 }
 
 
+# Per-unit Carrefour prices for cross-source item comparison (from smeb_all items)
+make_carrefour_items <- function(exch) {
+  smeb_basket <- s3_json("s3://mena-regional/Lebanon/food-prices/Carrefour/normalized/smeb_all.json")
+
+  exch_monthly <- exch %>%
+    mutate(date = floor_date(date, "month")) %>%
+    group_by(date) %>%
+    summarise(lbp_usd = mean(lbp_usd), .groups = "drop")
+
+  smeb_basket %>%
+    select(date, items) %>%
+    unnest(items) %>%
+    select(date, item, unit,
+           price = price_per_unit_lbp, price_usd = price_per_unit_usd) %>%
+    mutate(
+      date     = floor_date(as.Date(date), "month"),
+      unit     = if_else(unit == "liter", "L", unit),
+      quantity = 1
+    ) %>%
+    group_by(date, item, unit, quantity) %>%
+    summarise(
+      price     = mean(price,     na.rm = TRUE),
+      price_usd = mean(price_usd, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    left_join(exch_monthly, by = "date") %>%
+    mutate(source = "Carrefour")
+}
+
+
 # ── Main: assemble app_set ────────────────────────────────────────────────────
 
 build_app_set <- function() {
@@ -298,7 +328,12 @@ build_app_set <- function() {
     filter(date >= min(lebgov$date)) %>%
     select(all_of(colnames(monthly_set)))
 
-  bind_rows(monthly_set, wfp_trimmed, cpi)
+  list(
+    app_set         = bind_rows(monthly_set, wfp_trimmed, cpi),
+    carrefour_items = make_carrefour_items(exch)
+  )
 }
 
-app_set <- build_app_set()
+built <- build_app_set()
+app_set         <- built$app_set
+carrefour_items <- built$carrefour_items
