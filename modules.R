@@ -261,6 +261,14 @@ make_fuel_set <- function(exch, col_order) {
 }
 
 
+# Carrefour basket labels that correspond to a different name on the definition sheet.
+carrefour_item_names <- c(
+  "Bleach"             = "Disinfectant fluid / Bleach",
+  "Dish Detergent"     = "Liquid Dish detergent",
+  "Laundry Detergent"  = "Laundry soap/detergent",
+  "Soap"               = "Individual soap"
+)
+
 # Per-unit Carrefour prices for cross-source item comparison (from smeb_all items)
 make_carrefour_items <- function(exch) {
   smeb_basket <- s3_json("s3://mena-regional/Lebanon/food-prices/Carrefour/normalized/smeb_all.json")
@@ -277,6 +285,7 @@ make_carrefour_items <- function(exch) {
            price = price_per_unit_lbp, price_usd = price_per_unit_usd) %>%
     mutate(
       date     = floor_date(as.Date(date), "month"),
+      item     = coalesce(unname(carrefour_item_names[item]), item),
       unit     = if_else(unit == "liter", "L", unit),
       quantity = 1
     ) %>%

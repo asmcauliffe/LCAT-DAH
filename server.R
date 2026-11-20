@@ -18,7 +18,7 @@ source("modules.R")
 # ── SMEB item definitions for cross-source comparison ─────────────────────────
 
 deffer <- readxl::read_excel("SMEB_tables_def.xlsx", sheet = "deffer") %>%
-  filter(baskett == "Food SMEB")
+  filter(baskett %in% c("Food SMEB", "NFI"))
 
 # ── Static data loaded once at startup ───────────────────────────────────────
 
@@ -127,6 +127,19 @@ vuln_pal <- colorBin(
 )
 
 highlight_icon <- makeAwesomeIcon(icon = "flag", markerColor = "white", iconColor = "black")
+
+# CARTO basemaps require an API key on the tile URL. leaflet.providers
+# does not pass that key through, so these helpers build addTiles() URLs.
+carto_attribution <- '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+
+carto_tile_url <- function(style) {
+  paste0(
+    "https://basemaps.cartocdn.com/rastertiles/",
+    style,
+    "/{z}/{x}/{y}.png?key=",
+    Sys.getenv("CARTO_API_KEY")
+  )
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SERVER
@@ -409,7 +422,11 @@ function(input, output, session) {
   output$nlr_map <- renderLeaflet({
     leaflet(data = most_vuln) %>%
       setView(lat = 33.9, lng = 36, zoom = 8) %>%
-      addProviderTiles("CartoDB.DarkMatter") %>%
+      addTiles(
+        urlTemplate = carto_tile_url("dark_all"),
+        attribution = carto_attribution,
+        group = "CartoDB.DarkMatter"
+      ) %>%
       addPolygons(
         weight       = 0.5,
         color        = "#8c8c8c",
