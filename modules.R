@@ -31,6 +31,12 @@ if (nchar(Sys.getenv("AWS_ACCESS_KEY_ID")) == 0 ||
 s3_csv  <- function(key) s3read_using(FUN = read.csv,          object = key)
 s3_json <- function(key) s3read_using(FUN = jsonlite::fromJSON, object = key)
 
+s3_download <- function(key, ext) {
+  dest <- tempfile(fileext = ext)
+  aws.s3::save_object(object = key, file = dest)
+  dest
+}
+
 
 # ── Shared helper: outlier smoothing ─────────────────────────────────────────
 # Replaces values more than 2 SD from the group median with a 3-point

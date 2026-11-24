@@ -22,7 +22,10 @@ deffer <- readxl::read_excel("SMEB_tables_def.xlsx", sheet = "deffer") %>%
 
 # ── Static data loaded once at startup ───────────────────────────────────────
 
-vuln_raw <- sf::st_read("evs_sep24.geojson", quiet = TRUE) %>%
+vuln_raw <- sf::st_read(
+  s3_download("s3://mena-regional/Lebanon/shiny/evs.geojson", ".geojson"),
+  quiet = TRUE
+) %>%
   mutate(Rescaled_Vuln = { inv <- function(x) ((x - max(x)) * -1) + min(x); inv(Rescaled_Vuln) })
 
 most_vuln <- vuln_raw %>%
@@ -35,7 +38,10 @@ most_vuln <- vuln_raw %>%
     Vulnerability        = as.factor(Vulnerability)
   )
 
-nlr_raw <- readr::read_csv("new_nlr_ts.csv", show_col_types = FALSE) %>%
+nlr_raw <- readr::read_csv(
+  s3_download("s3://mena-regional/Lebanon/shiny/new_nlr_ts.csv", ".csv"),
+  show_col_types = FALSE
+) %>%
   mutate(date = as.Date(date))
 
 # ── Derived lookups from app_set ──────────────────────────────────────────────
